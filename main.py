@@ -1,95 +1,63 @@
-import os
-from flask import Flask, request, render_template_string
+from flask import Flask, request, jsonify, render_template_string
 from g4f.client import Client
 
 app = Flask(__name__)
+client = Client()
 
-# =============================
-# HTML Vorlage
-# =============================
-HTML_PAGE = """
+html_template = """
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>📝 KI Textgenerator</title>
-<style>
-  body {
-    background: linear-gradient(135deg, #000010, #001a33);
-    color: #fff;
-    font-family: Arial, sans-serif;
-    text-align: center;
-    padding: 2rem;
-  }
-  h1 { color: #26d07b; }
-  form { margin: 1.5rem auto; max-width: 500px; }
-  input[type=text] {
-    width: 90%;
-    padding: 0.8rem;
-    border-radius: 8px;
-    border: none;
-    font-size: 1rem;
-    margin-bottom: 1rem;
-  }
-  button {
-    background: #26d07b;
-    border: none;
-    padding: 0.8rem 1.5rem;
-    border-radius: 8px;
-    font-size: 1rem;
-    color: #000;
-    cursor: pointer;
-    margin: 0.5rem;
-  }
-  button:hover { background: #1aa868; }
-  pre {
-    text-align: left;
-    background: rgba(0,0,0,0.5);
-    padding: 1rem;
-    border-radius: 12px;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    margin: 2rem auto;
-    max-width: 800px;
-  }
-</style>
+  <meta charset="utf-8">
+  <title>TextPage KI</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+    textarea { width: 90%; max-width: 600px; height: 120px; padding: 10px; border-radius: 10px; border: none; }
+    button { margin-top: 10px; padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 10px; cursor: pointer; }
+    button:hover { background: #1e40af; }
+    .output { margin-top: 20px; white-space: pre-wrap; background: #1e293b; padding: 20px; border-radius: 10px; width: 90%; max-width: 600px; }
+  </style>
 </head>
 <body>
-  <h1>📝 KI Textgenerator</h1>
-  <p>Gib einen Prompt ein, und die KI erzeugt Text für dich.</p>
-  <form method="POST">
-    <input type="text" name="prompt" placeholder="z. B. Schreibe ein Gedicht über einen Fuchs im Neonwald" required>
-    <br>
-    <button type="submit">Text generieren</button>
+  <h1>TextPage — KI-Schreibassistent</h1>
+  <form id="chatForm">
+    <textarea name="prompt" placeholder="Schreibe hier deinen Text oder deine Frage..."></textarea>
+    <button type="submit">Absenden</button>
   </form>
-  {% if text_result %}
-    <pre>{{ text_result }}</pre>
-  {% elif error %}
-    <p style="color:red;">⚠️ {{ error }}</p>
-  {% endif %}
+  <div class="output" id="output"></div>
+
+  <script>
+    const form = document.getElementById('chatForm');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const prompt = form.prompt.value;
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt})
+      });
+      const data = await res.json();
+      document.getElementById('output').textContent = data.response;
+    });
+  </script>
 </body>
 </html>
 """
 
-# =============================
-# Flask Routes
-# =============================
-@app.route("/", methods=["GET", "POST"])
-def home():
-    if request.method == "POST":
-        prompt = request.form.get("prompt")
-        try:
-            client = Client()
-            text_result = client.chat.ask(prompt=prompt, model="gpt-4")
-            return render_template_string(HTML_PAGE, text_result=text_result)
-        except Exception as e:
-            return render_template_string(HTML_PAGE, error=str(e))
-    return render_template_string(HTML_PAGE)
+@app.route('/')
+def index():
+    return render_template_string(html_template)
 
-# =============================
-# Start
-# =============================
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    prompt = data.get('prompt', '')
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    text = response.choices[0].message.content
+    return jsonify({'response': text})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
